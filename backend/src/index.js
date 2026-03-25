@@ -9,6 +9,7 @@ app.use(cors());
 const fieldRoutes = require("./routes/field.routes");
 const versionRoutes = require("./routes/version.routes");
 const submissionRoutes = require("./routes/submission.routes");
+const uploadRoutes = require("./routes/upload.routes");
 
 
 const formRoutes = require("./routes/form.routes");
@@ -18,6 +19,8 @@ app.use(express.json());
 app.use("/forms", formRoutes);
 app.use("/forms/:formId/versions", versionRoutes);
 app.use("/forms/:formId/submissions", submissionRoutes);
+app.use("/uploads", uploadRoutes);
+app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
 app.use("/fields", fieldRoutes);
 app.get("/", (req, res) => {
   res.send("API Running 🚀");
