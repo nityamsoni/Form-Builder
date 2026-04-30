@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const formController = require("../controllers/form.controller");
+const { requireAuth } = require("../middleware/auth.middleware");
 
-router.post("/", formController.createForm);
-router.get("/", formController.listForms);
-router.get("/:id", formController.getForm);
-router.patch("/:id", formController.updateForm);
-router.delete("/:id", formController.deleteForm);
+router.post("/", requireAuth, formController.createForm);
+router.get("/", requireAuth, formController.listForms);
+router.get("/:id", requireAuth, formController.getForm);
+router.patch("/:id", requireAuth, formController.updateForm);
+router.delete("/:id", requireAuth, formController.deleteForm);
 
 module.exports = router;

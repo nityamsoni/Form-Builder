@@ -1,8 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const fieldController = require("../controllers/field.controller");
+const { requireAuth } = require("../middleware/auth.middleware");
 
-router.post("/", fieldController.createField);
-router.get("/:formId", fieldController.getFields);
+router.post("/", requireAuth, fieldController.createField);
+router.get("/:formId", requireAuth, fieldController.getFields);
 
 module.exports = router;
