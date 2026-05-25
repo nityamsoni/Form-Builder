@@ -1,7 +1,9 @@
 const prisma = require("../prisma/client");
 
+const buildFormAccessWhere = () => ({});
+
 // Create Form
-const createForm = async (data) => {
+const createForm = async (data, session) => {
   const form = await prisma.form.create({
     data: {
       name: data.name,
@@ -21,8 +23,9 @@ const createForm = async (data) => {
 };
 
 // List all forms
-const listForms = async () => {
+const listForms = async (session) => {
   return prisma.form.findMany({
+    where: buildFormAccessWhere(session),
     orderBy: {
       createdAt: "desc",
     },
@@ -38,9 +41,14 @@ const listForms = async () => {
 };
 
 // Get Form by ID
-const getFormById = async (id) => {
-  return prisma.form.findUnique({
-    where: { id: Number(id) },
+const getFormById = async (id, session) => {
+  const formId = Number(id);
+
+  return prisma.form.findFirst({
+    where: {
+      id: formId,
+      ...buildFormAccessWhere(session),
+    },
     include: {
       fields: true,
       versions: {
@@ -66,9 +74,22 @@ const getFormById = async (id) => {
 };
 
 // Update Form
-const updateForm = async (id, data) => {
+const updateForm = async (id, data, session) => {
+  const formId = Number(id);
+  const existing = await prisma.form.findFirst({
+    where: {
+      id: formId,
+      ...buildFormAccessWhere(session),
+    },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw new Error("Form not found");
+  }
+
   return prisma.form.update({
-    where: { id: Number(id) },
+    where: { id: formId },
     data: {
       name: data.name,
     },
@@ -76,8 +97,19 @@ const updateForm = async (id, data) => {
 };
 
 // Delete Form
-const deleteForm = async (id) => {
+const deleteForm = async (id, session) => {
   const formId = Number(id);
+  const existing = await prisma.form.findFirst({
+    where: {
+      id: formId,
+      ...buildFormAccessWhere(session),
+    },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw new Error("Form not found");
+  }
 
   // Legacy flat fields table may still reference this form without cascade.
   await prisma.field.deleteMany({

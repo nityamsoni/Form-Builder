@@ -8,13 +8,114 @@ datasource db {
 }
 
 model Form {
-  id        Int      @id @default(autoincrement())
-  name      String
-  createdAt DateTime @default(now())
-
-  fields    Field[]
-  versions  FormVersion[]
+  id          Int           @id @default(autoincrement())
+  name        String
+  createdAt   DateTime      @default(now())
+  fields      Field[]
+  versions    FormVersion[]
   submissions Submission[]
+}
+
+model FormVersion {
+  id          Int           @id @default(autoincrement())
+  formId      Int
+  versionNo   Int
+  status      VersionStatus @default(draft)
+  title       String?
+  createdAt   DateTime      @default(now())
+  publishedAt DateTime?
+  nodes       FormNode[]
+  form        Form          @relation(fields: [formId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([formId, versionNo])
+  @@index([formId, status])
+}
+
+model Submission {
+  id          Int               @id @default(autoincrement())
+  formId      Int
+  versionId   Int
+  submittedAt DateTime          @default(now())
+  meta        Json?
+  userId      Int?
+  form        Form              @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user        User?             @relation(fields: [userId], references: [id])
+  version     FormVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  values      SubmissionValue[]
+
+  @@index([formId, submittedAt])
+  @@index([versionId, submittedAt])
+  @@index([userId, submittedAt])
+}
+
+model SubmissionValue {
+  id           Int        @id @default(autoincrement())
+  submissionId Int
+  nodeId       Int?
+  fieldName    String
+  value        Json?
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([fieldName])
+}
+
+model FormNode {
+  id              Int         @id @default(autoincrement())
+  versionId       Int
+  parentId        Int?
+  nodeType        NodeType
+  name            String?
+  label           String?
+  key             String?
+  fieldType       String?
+  required        Boolean     @default(false)
+  position        Int         @default(0)
+  column          Int?
+  placeholder     String?
+  helperText      String?
+  options         Json?
+  validationRules Json?
+  dependencyRules Json?
+  designConfig    Json?
+  meta            Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  parent          FormNode?   @relation("FormNodeParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children        FormNode[]  @relation("FormNodeParent")
+  version         FormVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([parentId])
+  @@index([versionId, position])
+  @@index([versionId, parentId, position])
+}
+
+model Field {
+  id        Int      @id @default(autoincrement())
+  formId    Int
+  type      String
+  name      String
+  label     String
+  column    Int?
+  createdAt DateTime @default(now())
+  options   Json?
+  order     Int?
+  pattern   String?
+  required  Boolean  @default(false)
+  uiConfig  Json?
+  form      Form     @relation(fields: [formId], references: [id])
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  name         String
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  submissions  Submission[]
 }
 
 enum VersionStatus {
@@ -34,111 +135,4 @@ enum NodeType {
   th
   td
   field
-}
-
-model FormVersion {
-  id          Int           @id @default(autoincrement())
-  formId       Int
-  versionNo    Int
-  status       VersionStatus @default(draft)
-  title        String?
-  createdAt    DateTime      @default(now())
-  publishedAt  DateTime?
-
-  form         Form          @relation(fields: [formId], references: [id], onDelete: Cascade)
-  nodes        FormNode[]
-  submissions  Submission[]
-
-  @@unique([formId, versionNo])
-  @@index([formId, status])
-}
-
-model Submission {
-  id          Int          @id @default(autoincrement())
-  formId       Int
-  versionId    Int
-  submittedAt  DateTime     @default(now())
-  meta         Json?
-
-  form         Form         @relation(fields: [formId], references: [id], onDelete: Cascade)
-  version      FormVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  values       SubmissionValue[]
-
-  @@index([formId, submittedAt])
-  @@index([versionId, submittedAt])
-}
-
-model SubmissionValue {
-  id            Int         @id @default(autoincrement())
-  submissionId  Int
-  nodeId        Int?
-  fieldName     String
-  value         Json?
-
-  submission    Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-
-  @@index([submissionId])
-  @@index([fieldName])
-}
-
-model FormNode {
-  id               Int          @id @default(autoincrement())
-  versionId        Int
-  parentId         Int?
-  nodeType         NodeType
-  name             String?
-  label            String?
-  key              String?
-  fieldType        String?
-  required         Boolean      @default(false)
-  position         Int          @default(0)
-  column           Int?
-  placeholder      String?
-  helperText       String?
-  options          Json?
-  validationRules  Json?
-  dependencyRules  Json?
-  designConfig     Json?
-  meta             Json?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-
-  version          FormVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  parent           FormNode?    @relation("FormNodeParent", fields: [parentId], references: [id], onDelete: Cascade)
-  children         FormNode[]   @relation("FormNodeParent")
-
-  @@index([versionId])
-  @@index([parentId])
-  @@index([versionId, position])
-  @@index([versionId, parentId, position])
-}
-
-model Field {
-  id        Int      @id @default(autoincrement())
-  formId    Int
-  type      String   // text, select, file, etc.
-  name      String   // unique key
-  label     String   // display label
-
-  order     Int?     // field_index
-  column    Int?     // layout column
-
-  required  Boolean  @default(false)
-  pattern   String?
-
-  options   Json?    // for dropdown (temporary)
-  uiConfig  Json?    // replaces "properties"
-
-  createdAt DateTime @default(now())
-
-  form      Form     @relation(fields: [formId], references: [id])
-}
-
-model User {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }

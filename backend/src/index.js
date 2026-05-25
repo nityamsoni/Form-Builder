@@ -11,6 +11,7 @@ const versionRoutes = require("./routes/version.routes");
 const submissionRoutes = require("./routes/submission.routes");
 const uploadRoutes = require("./routes/upload.routes");
 const authRoutes = require("./routes/auth.routes");
+const adminRoutes = require("./routes/admin.routes");
 
 
 const formRoutes = require("./routes/form.routes");
@@ -18,6 +19,7 @@ const prisma = require("./prisma/client");
 app.use(express.json());
 
 app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
 app.use("/forms", formRoutes);
 app.use("/forms/:formId/versions", versionRoutes);
 app.use("/forms/:formId/submissions", submissionRoutes);

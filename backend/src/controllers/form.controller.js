@@ -8,7 +8,7 @@ const createForm = async (req, res) => {
       return res.status(400).json({ error: "Form name is required" });
     }
 
-    const form = await formService.createForm(req.body);
+    const form = await formService.createForm(req.body, req.user);
     res.status(201).json(form);
   } catch (error) {
     if (String(error?.message || "").includes("does not exist")) {
@@ -25,7 +25,7 @@ const createForm = async (req, res) => {
 // GET /forms
 const listForms = async (req, res) => {
   try {
-    const forms = await formService.listForms();
+    const forms = await formService.listForms(req.user);
     res.json(forms);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -35,7 +35,7 @@ const listForms = async (req, res) => {
 // GET /forms/:id
 const getForm = async (req, res) => {
   try {
-    const form = await formService.getFormById(req.params.id);
+    const form = await formService.getFormById(req.params.id, req.user);
     if (!form) return res.status(404).json({ message: "Form not found" });
 
     res.json(form);
@@ -57,10 +57,10 @@ const updateForm = async (req, res) => {
       return res.status(400).json({ error: "Form name is required" });
     }
 
-    const form = await formService.updateForm(id, { name });
+    const form = await formService.updateForm(id, { name }, req.user);
     res.json(form);
   } catch (error) {
-    if (String(error?.code || "") === "P2025") {
+    if (String(error?.message || "") === "Form not found" || String(error?.code || "") === "P2025") {
       return res.status(404).json({ error: "Form not found" });
     }
 
@@ -76,10 +76,10 @@ const deleteForm = async (req, res) => {
       return res.status(400).json({ error: "Invalid form id" });
     }
 
-    await formService.deleteForm(id);
+    await formService.deleteForm(id, req.user);
     res.status(204).send();
   } catch (error) {
-    if (String(error?.code || "") === "P2025") {
+    if (String(error?.message || "") === "Form not found" || String(error?.code || "") === "P2025") {
       return res.status(404).json({ error: "Form not found" });
     }
 

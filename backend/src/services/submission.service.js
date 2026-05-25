@@ -1,5 +1,31 @@
 const prisma = require("../prisma/client");
 
+const isAdminSession = (session) => String(session?.role || "") === "admin";
+
+const assertCanAccessForm = async (formId, session) => {
+  const where = { id: Number(formId) };
+
+  if (!isAdminSession(session)) {
+    const ownerId = Number(session?.id);
+    if (!Number.isFinite(ownerId)) {
+      throw new Error("Invalid user session");
+    }
+
+    where.ownerId = ownerId;
+  }
+
+  const form = await prisma.form.findFirst({
+    where,
+    select: { id: true },
+  });
+
+  if (!form) {
+    throw new Error("Form not found");
+  }
+
+  return form;
+};
+
 const getSubmissionVersion = async (formId, versionId) => {
   if (versionId) {
     const explicit = await prisma.formVersion.findFirst({
@@ -35,7 +61,7 @@ const getSubmissionVersion = async (formId, versionId) => {
   });
 };
 
-const createSubmission = async ({ formId, payload, versionId, meta }) => {
+const createSubmission = async ({ formId, payload, versionId, meta, userId }) => {
   const form = await prisma.form.findUnique({ where: { id: Number(formId) } });
   if (!form) {
     throw new Error("Form not found");
@@ -70,10 +96,11 @@ const createSubmission = async ({ formId, payload, versionId, meta }) => {
     };
   });
 
-  return prisma.submission.create({
+  const submission = await prisma.submission.create({
     data: {
       formId: Number(formId),
       versionId: version.id,
+      userId: userId != null ? Number(userId) : null,
       meta: meta || null,
       values: {
         create: values,
@@ -83,13 +110,39 @@ const createSubmission = async ({ formId, payload, versionId, meta }) => {
       values: true,
     },
   });
+
+  if (!submission.userId) {
+    return submission;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: submission.userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
+
+  return {
+    ...submission,
+    user,
+  };
 };
 
-const listSubmissions = async (formId, limit = 50) => {
+const listSubmissions = async (formId, limit = 50, session) => {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
-  return prisma.submission.findMany({
+  await assertCanAccessForm(formId, session);
+
+  const submissions = await prisma.submission.findMany({
     where: { formId: Number(formId) },
-    include: {
+    select: {
+      id: true,
+      formId: true,
+      versionId: true,
+      userId: true,
+      submittedAt: true,
+      meta: true,
       values: true,
       version: {
         select: {
@@ -102,6 +155,25 @@ const listSubmissions = async (formId, limit = 50) => {
     orderBy: { submittedAt: "desc" },
     take: safeLimit,
   });
+
+  const userIds = [...new Set(submissions.map((item) => item.userId).filter(Boolean))];
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      })
+    : [];
+
+  const userMap = new Map(users.map((user) => [user.id, user]));
+
+  return submissions.map((submission) => ({
+    ...submission,
+    user: submission.userId ? userMap.get(submission.userId) || null : null,
+  }));
 };
 
 module.exports = {
