@@ -24,9 +24,13 @@ const resolveSession = async (token) => {
 
   const user = await authService.getProfile(Number(payload.sub));
 
+  if (user.isActive === false) {
+    throw new Error("Account is disabled");
+  }
+
   return {
     ...user,
-    role: "user",
+    role: user.role || "user",
   };
 };
 

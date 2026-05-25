@@ -9,6 +9,8 @@ const sanitizeUser = (user) => ({
   id: user.id,
   name: user.name,
   email: user.email,
+  role: user.role || "user",
+  isActive: user.isActive !== false,
   createdAt: user.createdAt,
 });
 
@@ -18,6 +20,7 @@ const signToken = (user) => {
       sub: String(user.id),
       email: user.email,
       name: user.name,
+      role: user.role || "user",
     },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }
@@ -72,6 +75,8 @@ const register = async ({ name, email, password }) => {
       name: safeName,
       email: safeEmail,
       passwordHash,
+      role: "user",
+      isActive: true,
     },
   });
 
@@ -91,6 +96,10 @@ const login = async ({ email, password }) => {
 
   if (!user) {
     throw new Error("Invalid email or password");
+  }
+
+  if (user.isActive === false) {
+    throw new Error("Account is disabled");
   }
 
   const matches = await bcrypt.compare(safePassword, user.passwordHash);

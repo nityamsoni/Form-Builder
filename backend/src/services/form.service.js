@@ -1,12 +1,31 @@
 const prisma = require("../prisma/client");
 
-const buildFormAccessWhere = () => ({});
+const isAdminSession = (session) => String(session?.role || "") === "admin";
+
+const buildFormAccessWhere = (session) => {
+  if (isAdminSession(session)) {
+    return {};
+  }
+
+  const ownerId = Number(session?.id);
+  if (!Number.isFinite(ownerId)) {
+    throw new Error("Invalid user session");
+  }
+
+  return { ownerId };
+};
 
 // Create Form
 const createForm = async (data, session) => {
+  const ownerId = isAdminSession(session) ? null : Number(session?.id);
+  if (!isAdminSession(session) && !Number.isFinite(ownerId)) {
+    throw new Error("Invalid user session");
+  }
+
   const form = await prisma.form.create({
     data: {
       name: data.name,
+      ownerId,
     },
   });
 

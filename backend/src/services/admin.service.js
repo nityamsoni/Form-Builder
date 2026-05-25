@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const prisma = require("../prisma/client");
 
 const ADMIN_ID = "admin@formbuilder.dev";
@@ -25,6 +26,30 @@ const signToken = () => {
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }
   );
+};
+
+const logAdminAction = async ({
+  action,
+  entityType,
+  entityId,
+  meta,
+  actorEmail = ADMIN_ID,
+}) => {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorId: null,
+        actorRole: "admin",
+        actorEmail,
+        action,
+        entityType,
+        entityId: entityId == null ? null : Number(entityId),
+        meta: meta || null,
+      },
+    });
+  } catch {
+    // Intentionally ignore audit failures.
+  }
 };
 
 const mapSubmissionRow = (row, userMap) => ({
@@ -215,9 +240,220 @@ const getOverview = async () => {
   };
 };
 
+const listUsers = async ({ query = "" } = {}) => {
+  const normalized = String(query || "").trim().toLowerCase();
+
+  const where = normalized
+    ? {
+        OR: [
+          { name: { contains: normalized, mode: "insensitive" } },
+          { email: { contains: normalized, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: {
+        select: {
+          forms: true,
+          submissions: true,
+        },
+      },
+    },
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive !== false,
+    createdAt: user.createdAt,
+    formCount: user._count?.forms || 0,
+    submissionCount: user._count?.submissions || 0,
+  }));
+};
+
+const getUserDetail = async (userId) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid user id");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      _count: {
+        select: { forms: true, submissions: true },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const forms = await prisma.form.findMany({
+    where: { ownerId: id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: {
+        select: { submissions: true, versions: true, fields: true },
+      },
+    },
+  });
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive !== false,
+    createdAt: user.createdAt,
+    formCount: user._count?.forms || 0,
+    submissionCount: user._count?.submissions || 0,
+    forms: forms.map((form) => ({
+      id: form.id,
+      name: form.name,
+      createdAt: form.createdAt,
+      submissions: form._count?.submissions || 0,
+      versions: form._count?.versions || 0,
+      fields: form._count?.fields || 0,
+    })),
+  };
+};
+
+const updateUserRole = async ({ userId, role }) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid user id");
+  }
+
+  const safeRole = role === "admin" ? "admin" : "user";
+  const user = await prisma.user.update({
+    where: { id },
+    data: { role: safeRole },
+  });
+
+  await logAdminAction({
+    action: "user.role.update",
+    entityType: "user",
+    entityId: id,
+    meta: { role: safeRole },
+  });
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive !== false,
+  };
+};
+
+const updateUserStatus = async ({ userId, isActive }) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid user id");
+  }
+
+  const user = await prisma.user.update({
+    where: { id },
+    data: { isActive: Boolean(isActive) },
+  });
+
+  await logAdminAction({
+    action: "user.status.update",
+    entityType: "user",
+    entityId: id,
+    meta: { isActive: user.isActive !== false },
+  });
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive !== false,
+  };
+};
+
+const resetUserPassword = async ({ userId, password }) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid user id");
+  }
+
+  const safePassword = String(password || "");
+  if (safePassword.length < 8) {
+    throw new Error("Password must be at least 8 characters long");
+  }
+
+  const passwordHash = await bcrypt.hash(safePassword, 12);
+  await prisma.user.update({
+    where: { id },
+    data: { passwordHash },
+  });
+
+  await logAdminAction({
+    action: "user.password.reset",
+    entityType: "user",
+    entityId: id,
+  });
+
+  return { success: true };
+};
+
+const deleteUser = async ({ userId }) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id)) {
+    throw new Error("Invalid user id");
+  }
+
+  await prisma.user.delete({ where: { id } });
+
+  await logAdminAction({
+    action: "user.delete",
+    entityType: "user",
+    entityId: id,
+  });
+
+  return { success: true };
+};
+
+const listAuditLogs = async ({ limit = 50 } = {}) => {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+  const rows = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: safeLimit,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    actorId: row.actorId,
+    actorRole: row.actorRole,
+    actorEmail: row.actorEmail,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    meta: row.meta,
+    createdAt: row.createdAt,
+  }));
+};
+
 module.exports = {
   login,
   getOverview,
+  listUsers,
+  getUserDetail,
+  updateUserRole,
+  updateUserStatus,
+  resetUserPassword,
+  deleteUser,
+  listAuditLogs,
   ADMIN_ID,
   ADMIN_PASSWORD,
 };

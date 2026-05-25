@@ -1,7 +1,18 @@
 const prisma = require("../prisma/client");
 
-const assertCanAccessForm = async (formId) => {
+const isAdminSession = (session) => String(session?.role || "") === "admin";
+
+const assertCanAccessForm = async (formId, session) => {
   const where = { id: Number(formId) };
+
+  if (!isAdminSession(session)) {
+    const ownerId = Number(session?.id);
+    if (!Number.isFinite(ownerId)) {
+      throw new Error("Invalid user session");
+    }
+
+    where.ownerId = ownerId;
+  }
 
   const form = await prisma.form.findFirst({
     where,
@@ -121,7 +132,7 @@ const createSubmission = async ({ formId, payload, versionId, meta, userId }) =>
 
 const listSubmissions = async (formId, limit = 50, session) => {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
-  await assertCanAccessForm(formId);
+  await assertCanAccessForm(formId, session);
 
   const submissions = await prisma.submission.findMany({
     where: { formId: Number(formId) },
