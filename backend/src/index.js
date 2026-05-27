@@ -5,6 +5,7 @@ const cors = require("cors");
 
 const app = express();
 app.use(cors());
+const PORT = process.env.PORT || 5000;
 
 const fieldRoutes = require("./routes/field.routes");
 const versionRoutes = require("./routes/version.routes");
@@ -43,6 +44,6 @@ app.get("/health/db", async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
